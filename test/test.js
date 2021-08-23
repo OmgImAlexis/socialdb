@@ -7,7 +7,7 @@ client.on('error', (err) => {
   console.log(err);
 });
 
-const SocialDB = require('../index.js');
+const SocialDB = require('../dist/index.js').default;
 
 describe('Testing SocialDB', () => {
   const sd = new SocialDB(client);
@@ -244,13 +244,11 @@ describe('Testing SocialDB', () => {
         // get a list of user 2's friends
         .then(() => sd.friends(2))
         .then((users) => {
-          console.log(users); // ['3']
           assert.equal(users[0], 3);
         })
         // get a list of user 3's friends
         .then(() => sd.friends(3))
         .then((users) => {
-          console.log(users); // ['2']
           assert.equal(users[0], 2);
           done();
         });
@@ -262,13 +260,11 @@ describe('Testing SocialDB', () => {
         // get a list of user 2's friends
         .then(() => sd.friends(2))
         .then((users) => {
-          console.log(users); // []
           assert.equal(users[0], null);
         })
         // get a list of user 3's friends
         .then(() => sd.friends(3))
         .then((users) => {
-          console.log(users); // []
           assert.equal(users[0], null);
           done();
         });

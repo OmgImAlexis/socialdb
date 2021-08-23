@@ -1,28 +1,34 @@
+import createDebugger from 'debug';
+import type { RedisClient } from 'redis';
+
 // Start node with DEBUG=socialdb to see debug output
-const debug = require('debug')('socialdb');
+const debug = createDebugger('socialdb');
 
 /**
  * String constants for Redis keys identifying user's follower states.
  */
 const STATE_KEY = {
-  accepted: 'accepted',
-  blocked: 'blocked',
-  invited: 'invited',
-  pending: 'pending',
-  requested: 'requested',
+  accepted: 'accepted' as const,
+  blocked: 'blocked' as const,
+  invited: 'invited' as const,
+  pending: 'pending' as const,
+  requested: 'requested' as const
 };
 
 /**
  * Main class for user social graph with friend list and follower status.
  * Users must follow each other to be friends and in the `accepted` state.
  */
-class SocialDB {
+export class SocialDB<Id extends string | number = string | number> {
+  client: RedisClient;
+  namespace: string;
+
   /**
    * Initializes a new SocialDB object.
    * Takes in a Redis client (https://github.com/NodeRedis/node_redis).
    * Optionally takes in a namespace.
    */
-  constructor(redis, namespace = 'socialdb') {
+  constructor(redis: RedisClient, namespace = 'socialdb') {
     this.client = redis;
     this.namespace = namespace;
   }
@@ -45,10 +51,10 @@ class SocialDB {
    *     user:1:accepted 11
    *     user:11:accepted 1
    */
-  follow(fromId, toId) {
-    return new Promise((resolve, reject) => {
+  follow(fromId: Id, toId: Id) {
+    return new Promise<void>((resolve, reject) => {
       // check if this is an initial or reciprocal request
-      this.client.zscore(`${this.namespace}:user:${fromId}:${STATE_KEY.pending}`, toId, (err, result) => {
+      this.client.zscore(`${this.namespace}:user:${fromId}:${STATE_KEY.pending}`, `${toId}`, (err, result) => {
         if (err) { reject(err); }
         // use date for sorted set ordering
         const score = Date.now();
@@ -66,8 +72,8 @@ class SocialDB {
         } else {
           // handle reciprocal request
           this.client.multi()
-            .zrem(`${this.namespace}:user:${fromId}:${STATE_KEY.pending}`, toId)
-            .zrem(`${this.namespace}:user:${toId}:${STATE_KEY.requested}`, fromId)
+            .zrem(`${this.namespace}:user:${fromId}:${STATE_KEY.pending}`, `${toId}`)
+            .zrem(`${this.namespace}:user:${toId}:${STATE_KEY.requested}`, `${fromId}`)
             .zadd(`${this.namespace}:user:${toId}:${STATE_KEY.accepted}`, score, fromId)
             .zadd(`${this.namespace}:user:${fromId}:${STATE_KEY.accepted}`, score, toId)
             .exec((error) => {
@@ -84,11 +90,11 @@ class SocialDB {
    * unfollow() mutually removes friendship between two users and returns an empty Promise.
    * It removes each user from their `accepted` sets.
    */
-  unfollow(fromId, toId) {
-    return new Promise((resolve, reject) => {
+  unfollow(fromId: Id, toId: Id) {
+    return new Promise<void>((resolve, reject) => {
       this.client.multi()
-        .zrem(`${this.namespace}:user:${fromId}:${STATE_KEY.accepted}`, toId)
-        .zrem(`${this.namespace}:user:${toId}:${STATE_KEY.accepted}`, fromId)
+        .zrem(`${this.namespace}:user:${fromId}:${STATE_KEY.accepted}`, `${toId}`)
+        .zrem(`${this.namespace}:user:${toId}:${STATE_KEY.accepted}`, `${fromId}`)
         .exec((err) => {
           if (err) { reject(err); }
           debug(`Removed friendship between ${fromId} and ${toId}`);
@@ -101,12 +107,12 @@ class SocialDB {
   * block() adds `toId` to the blocked list for `fromId`.
   * It also removes the user and user being blocked from each other's `accepted` lists.
   */
-  block(fromId, toId) {
-    return new Promise((resolve, reject) => {
+  block(fromId: Id, toId: Id) {
+    return new Promise<void>((resolve, reject) => {
       this.client.multi()
-        .zadd(`${this.namespace}:user:${fromId}:${STATE_KEY.blocked}`, Date.now(), toId)
-        .zrem(`${this.namespace}:user:${fromId}:${STATE_KEY.accepted}`, toId)
-        .zrem(`${this.namespace}:user:${toId}:${STATE_KEY.accepted}`, fromId)
+        .zadd(`${this.namespace}:user:${fromId}:${STATE_KEY.blocked}`, Date.now(), `${toId}`)
+        .zrem(`${this.namespace}:user:${fromId}:${STATE_KEY.accepted}`, `${toId}`)
+        .zrem(`${this.namespace}:user:${toId}:${STATE_KEY.accepted}`, `${fromId}`)
         .exec((err) => {
           if (err) { reject(err); }
           debug(`${fromId} blocked ${toId}`);
@@ -116,13 +122,13 @@ class SocialDB {
   }
 
   /**
-   * invte() adds a user to the `invited` set.
+   * invite() adds a user to the `invited` set.
    * `invitedId` can be any form of identifier, like user id or phone number.
    * `userId` is the user id of the user who doing the inviting
    */
-  invite(userId, invitedId) {
+  invite(userId: Id, invitedId: Id) {
     // use date for sorted set ordering
-    return new Promise((resolve, reject) => {
+    return new Promise<number>((resolve, reject) => {
       this.client.zadd(
         `${this.namespace}:user:${invitedId}:${STATE_KEY.invited}`,
         Date.now(),
@@ -139,8 +145,8 @@ class SocialDB {
    * deleteInvites() removes all invites for an invited id.
    * `invitedId` can be any form of identifier, like user id or phone number.
    */
-  deleteInvites(invitedId) {
-    return new Promise((resolve, reject) => {
+  deleteInvites(invitedId: Id) {
+    return new Promise<number>((resolve, reject) => {
       this.client.del(
         `${this.namespace}:user:${invitedId}:${STATE_KEY.invited}`,
         (err, res) => {
@@ -155,7 +161,7 @@ class SocialDB {
    * requested() returns a Promise with a list of requested friends for a given `userId`.
    * Sorted by date of creation (newest to oldest).
    */
-  requested(userId) {
+  requested(userId: Id) {
     return this.getList(userId, STATE_KEY.requested);
   }
 
@@ -163,7 +169,7 @@ class SocialDB {
    * requested() returns a Promise with a list of requested friends for a given `id`.
    * Sorted by date of creation (newest to oldest).
    */
-  invited(id) {
+  invited(id: Id) {
     return this.getList(id, STATE_KEY.invited);
   }
 
@@ -171,7 +177,7 @@ class SocialDB {
    * pending() returns a Promise with a list of pending friends for a given `userId`.
    * Sorted by date of creation (newest to oldest).
    */
-  pending(userId) {
+  pending(userId: Id) {
     return this.getList(userId, STATE_KEY.pending);
   }
 
@@ -179,21 +185,21 @@ class SocialDB {
    * accepted() returns a Promise with a list of accepted friends for a given `userId`.
    * Sorted by date of creation (newest to oldest).
    */
-  accepted(userId) {
+  accepted(userId: Id) {
     return this.getList(userId, STATE_KEY.accepted);
   }
 
   /**
    * Alias for `accepted(userId)`.
    */
-  friends(userId) {
+  friends(userId: Id) {
     return this.accepted(userId);
   }
 
   /**
    * getList() returns a Redis sorted set for a given `userId` and state key.
    */
-  getList(userId, state) {
+  getList(userId: Id, state: keyof typeof STATE_KEY) {
     return new Promise((resolve, reject) => {
       const key = `${this.namespace}:user:${userId}:${state}`;
       debug(`Returning list for: ${key}`);
@@ -204,5 +210,3 @@ class SocialDB {
     });
   }
 }
-
-module.exports = SocialDB;

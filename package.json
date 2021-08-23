@@ -1,6 +1,6 @@
 {
   "name": "socialdb",
-  "version": "0.6.1",
+  "version": "1.0.0",
   "description": "Redis-backed social graph for Node.js",
   "keywords": [
     "redis",
@@ -8,7 +8,8 @@
     "friends",
     "friendship"
   ],
-  "main": "index.js",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "author": "Shane Vitarana <shanev@gmail.com>",
   "license": "MIT",
   "homepage": "https://github.com/shanev/socialdb",
@@ -17,21 +18,47 @@
     "url": "https://github.com/shanev/socialdb.git"
   },
   "dependencies": {
-    "debug": "^3.1.0",
-    "redis": "^2.8.0"
+    "bundlesize2": "^0.0.30",
+    "debug": "^4.3.2",
+    "redis": "^3.1.2"
   },
   "scripts": {
     "redis-start": "redis-server /usr/local/etc/redis.conf &",
     "redis-stop": "redis-cli shutdown",
-    "test": "nyc mocha",
-    "coverage": "nyc report --reporter=text-lcov > coverage/coverage.lcov && ./node_modules/.bin/codecov"
+    "build": "tsup ./src/index.ts --dts-resolve",
+    "prepare": "npm run build",
+    "test": "mocha -v",
+    "bundle-size": "bundlesize",
+    "test:coverage": "nyc --reporter=lcov --reporter=text-summary npm test",
+    "type:coverage": "typescript-coverage-report",
+    "coverage": "npm run type:coverage && npm run test:coverage"
   },
   "devDependencies": {
-    "codecov": "^3.0.0",
-    "eslint": "^4.10.0",
-    "eslint-config-airbnb-base": "^12.1.0",
-    "eslint-plugin-import": "^2.8.0",
-    "mocha": "^4.0.1",
-    "nyc": "^11.3.0"
+    "@types/debug": "^4.1.7",
+    "@types/redis": "^2.8.31",
+    "codecov": "^3.8.3",
+    "eslint": "^7.32.0",
+    "eslint-config-airbnb-base": "^14.2.1",
+    "eslint-plugin-import": "^2.24.1",
+    "mocha": "^9.1.0",
+    "nyc": "^15.1.0",
+    "tsup": "^4.14.0",
+    "typescript": "^4.3.5",
+    "typescript-coverage-report": "^0.6.0"
+  },
+  "bundlesize": [
+    {
+      "path": "./dist/index.js",
+      "maxSize": "1 kB",
+      "compression": "gzip"
+    },
+    {
+      "path": "./dist/index.js",
+      "maxSize": "5 kB",
+      "compression": "none"
+    }
+  ],
+  "typeCoverage": {
+    "atLeast": 100
   }
 }
